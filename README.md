@@ -22,9 +22,9 @@ help      Display this help message
 This installation guide describes the steps to download and link the i3-workspace-manager tool from GitHub, so that it can be run from anywhere in the command line.
 
 ```
-git clone https://github.com/bytebutcher/i3-workspace-manager.git.
-cd i3-workspace-manager.
-ln -s "$(pwd)/i3-workspace-manager.sh" ~/.local/bin/i3-workspace-manager
+git clone https://github.com/bytebutcher/i3-workspace-manager.git
+cd i3-workspace-manager
+ln -s "$(pwd)/i3-workspace-manager" ~/.local/bin/i3-workspace-manager
 ```
 
 Make sure that the ```~/.local/bin``` directory is in your ```PATH```. You can add the following line to your ```.bashrc``` or ```.zshrc```:
