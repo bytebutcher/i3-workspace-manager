@@ -112,6 +112,10 @@ function rename_workspace() {
     current_ws=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
     workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
     workspace_to_rename=$(echo -e "Rename current workspace ($current_ws)\n$workspaces" | rofi -dmenu -p "Select a workspace to rename")
+    if [ -z "$workspace_to_rename" ]; then
+        error_msg "No workspace selected."
+        exit 1
+    fi
     case $workspace_to_rename in
         "Rename current workspace ($current_ws)")
             old_name=$current_ws
