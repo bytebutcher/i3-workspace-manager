@@ -1,0 +1,181 @@
+#!/bin/bash
+# ##################################################
+# NAME:
+#   i3-workspace-manager
+# DESCRIPTION:
+#   Manage i3 workspaces
+# AUTHOR:
+#   bytebutcher
+# ##################################################
+
+VERSION="1.0.0"
+
+function error_msg() {
+    echo -e "Error: $1" >&2;
+}
+
+function do_require_command() {
+    local required_command="$1"
+    command -v "$required_command" >/dev/null 2>&1 || {
+        error_msg "Require $required_command but it's not installed. Aborting."
+        exit 1;
+    }
+}
+print_array() {
+    local array=("$@")
+    for i in $(seq 0 $(( ${#array[@]} -1 )))
+    do
+        echo ${array[i]}
+    done
+}
+
+function get_windows() {
+    local -n ids=$1
+    local -n titles=$2
+    local index pid program
+    index=0
+    while read -r window; do
+        pid=$(echo "$window" | awk '{print $3}')
+        program=$(ps -p "$pid" -o comm=)
+        ids[$index]=$(echo "$window" | awk '{print $1}' | xargs printf "%d")
+        titles[$index]="$program: $(echo "$window" | awk '{for (i=5; i<=NF; i++) print $i}')"
+        index+=1
+    done <<< "$(wmctrl -l -p)"
+}
+
+function get_current_window() {
+    local -n id=$1
+    local -n title=$2
+    id=$(xprop -root | awk '/_NET_ACTIVE_WINDOW\(WINDOW\)/{print $NF}' | xargs printf "%d");
+    title=$(xprop -id $id | awk '/_NET_WM_NAME/{$1=$2="";print}' | cut -d'"' -f2);
+}
+
+function create_workspace() {
+    local workspace_name;
+    workspace_name=$(rofi -dmenu -p "Enter workspace name")
+    if [ -z "$workspace_name" ]; then
+      error_msg "Workspace name cannot be empty."
+      exit 1
+    fi
+    i3-msg "workspace $workspace_name" 1> /dev/null
+}
+
+function move_window() {
+    local current_window current_window_id window_to_move window_ids window_titles 
+    get_windows window_ids window_titles
+    get_current_window current_window_id current_window
+    window_to_move=$(echo -e "Move selected window ($current_window)\n$(print_array "${window_titles[@]}")" | rofi -dmenu -p "Select a window to move" -format i)
+    if [ -z "$window_to_move" ]; then
+        error_msg "No window selected."
+        exit 1
+    fi
+    case $window_to_move in
+        0)
+            selected_window=$current_window_id
+            ;;
+        *)
+            let "window_to_move -= 1"
+            selected_window=${window_ids[$window_to_move]}
+            ;;
+    esac
+
+    current_workspace=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
+    workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
+    workspace_to_move=$(echo -e "Move to current workspace ($current_workspace)\n$workspaces" | rofi -dmenu -p "Move to workspace")
+    if [ -z "$workspace_to_move" ]; then
+        error_msg "No workspace selected."
+        exit 1
+    fi
+    case $workspace_to_move in
+        "Move to current workspace ($current_workspace)")
+            selected_workspace=$current_workspace
+            ;;
+        *)
+            selected_workspace=$workspace_to_move
+            ;;
+    esac
+    i3-msg "[id=$selected_window] move to workspace $selected_workspace" 1> /dev/null
+}
+
+function switch_workspace() {
+    local current_workspace workspace_name
+    current_workspace=$(i3-msg -t get_workspaces | jq -r '.[] | select(.focused==true).name')
+    workspace_name=$(i3-msg -t get_workspaces | jq -r '.[] | select(.name != "'"$current_workspace"'").name' | rofi -dmenu -p "Select a workspace to switch to")
+    if [ -z "$workspace_name" ]; then
+        error_msg "No workspace selected."
+        exit 1
+    fi
+    i3-msg "workspace $workspace_name" 1> /dev/null
+}
+
+function rename_workspace() {
+    current_ws=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
+    workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
+    workspace_to_rename=$(echo -e "Rename current workspace ($current_ws)\n$workspaces" | rofi -dmenu -p "Rename workspace")
+    case $workspace_to_rename in
+        "Rename current workspace ($current_ws)")
+            old_name=$current_ws
+            ;;
+        *)
+            old_name=$workspace_to_rename
+            ;;
+    esac
+    new_name=$(rofi -dmenu -p "Enter new name for $old_name")
+    if [ -z "$new_name" ]; then
+        error_msg "New name is empty."
+        exit 1
+    fi
+    i3-msg "rename workspace \"$old_name\" to \"$new_name\"" &> /dev/null
+}
+
+function delete_workspace() {
+    local workspace_index current_workspace
+    current_workspace=$(i3-msg -t get_workspaces | jq -r '.[] | select(.focused==true).name')
+    workspace_index=$(i3-msg -t get_workspaces | jq -r '.[].name' | rofi -dmenu -format i -p "Select a workspace to delete")
+    if [ -z "$workspace_index" ]; then
+        error_msg "No workspace selected."
+        exit 1
+    fi
+    workspace_name=$(i3-msg -t get_workspaces | jq -r ".[$workspace_index].name")
+    i3-msg "workspace $workspace_name  [workspace=$workspace_name] move to workspace $current_workspace" 1> /dev/null
+    i3-msg "workspace $workspace_name; kill" 1> /dev/null
+    i3-msg "workspace $current_workspace" 1> /dev/null
+}
+
+function display_help() {
+    echo "Usage: i3-workspace-manager [OPTION]"                               >&2
+    echo "Manage i3 workspaces."                                              >&2
+    echo ""                                                                   >&2
+    echo "Options:"                                                           >&2
+    echo "  -c | --create    Create a new workspace"                          >&2
+    echo "  -r | --rename    Rename an existing workspace"                    >&2
+    echo "  -d | --delete    Delete an existing workspace"                    >&2
+    echo "  -m | --move      Move a selected window to a selected workspace"  >&2
+    echo "  -s | --switch    Switch to a selected workspace"                  >&2
+    echo "  -h | --help      Display this help message"                       >&2
+}
+
+function main() {
+    case "$1" in
+        -c|--create) create_workspace ;;
+        -r|--rename) rename_workspace ;;
+        -d|--delete) delete_workspace ;;
+        -m|--move) move_window ;;
+        -s|--switch) switch_workspace ;;
+        -h|--help) display_help ;;
+        *) display_help; exit 1 ;;
+    esac
+}
+
+# Used to communicate with i3 window manager.
+do_require_command i3-msg
+# Used to show interactive menus.
+do_require_command rofi
+# Used to parse json output.
+do_require_command jq
+# Used to retrieve window titles and ids.
+do_require_command xprop
+# Used to retrieve window titles and ids.
+do_require_command wmctrl
+
+main "$@"
