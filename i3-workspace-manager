@@ -21,10 +21,10 @@ function do_require_command() {
         exit 1;
     }
 }
-print_array() {
+
+function print_array() {
     local array=("$@")
-    for i in $(seq 0 $(( ${#array[@]} -1 )))
-    do
+    for i in $(seq 0 $(( ${#array[@]} -1 ))); do
         echo ${array[i]}
     done
 }
@@ -81,7 +81,7 @@ function move_window() {
 
     current_workspace=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
     workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
-    workspace_to_move=$(echo -e "Move to current workspace ($current_workspace)\n$workspaces" | rofi -dmenu -p "Move to workspace")
+    workspace_to_move=$(echo -e "Move to current workspace ($current_workspace)\n$workspaces" | rofi -dmenu -p "Select a workspace to move the window to")
     if [ -z "$workspace_to_move" ]; then
         error_msg "No workspace selected."
         exit 1
@@ -111,7 +111,7 @@ function switch_workspace() {
 function rename_workspace() {
     current_ws=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
     workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
-    workspace_to_rename=$(echo -e "Rename current workspace ($current_ws)\n$workspaces" | rofi -dmenu -p "Rename workspace")
+    workspace_to_rename=$(echo -e "Rename current workspace ($current_ws)\n$workspaces" | rofi -dmenu -p "Select a workspace to rename")
     case $workspace_to_rename in
         "Rename current workspace ($current_ws)")
             old_name=$current_ws
@@ -143,26 +143,26 @@ function delete_workspace() {
 }
 
 function display_help() {
-    echo "Usage: i3-workspace-manager [OPTION]"                               >&2
-    echo "Manage i3 workspaces."                                              >&2
-    echo ""                                                                   >&2
-    echo "Options:"                                                           >&2
-    echo "  -c | --create    Create a new workspace"                          >&2
-    echo "  -r | --rename    Rename an existing workspace"                    >&2
-    echo "  -d | --delete    Delete an existing workspace"                    >&2
-    echo "  -m | --move      Move a selected window to a selected workspace"  >&2
-    echo "  -s | --switch    Switch to a selected workspace"                  >&2
-    echo "  -h | --help      Display this help message"                       >&2
+    echo "Usage: i3-workspace-manager [OPTION]"                        >&2
+    echo "Manage i3 workspaces."                                       >&2
+    echo ""                                                            >&2
+    echo "Options:"                                                    >&2
+    echo "  create    Create a new workspace"                          >&2
+    echo "  rename    Rename an existing workspace"                    >&2
+    echo "  delete    Delete an existing workspace"                    >&2
+    echo "  move      Move a selected window to a selected workspace"  >&2
+    echo "  switch    Switch to a selected workspace"                  >&2
+    echo "  help      Display this help message"                       >&2
 }
 
 function main() {
     case "$1" in
-        -c|--create) create_workspace ;;
-        -r|--rename) rename_workspace ;;
-        -d|--delete) delete_workspace ;;
-        -m|--move) move_window ;;
-        -s|--switch) switch_workspace ;;
-        -h|--help) display_help ;;
+        create) create_workspace ;;
+        rename) rename_workspace ;;
+        delete) delete_workspace ;;
+        move) move_window ;;
+        switch) switch_workspace ;;
+        -?|-h|--help|help) display_help ;;
         *) display_help; exit 1 ;;
     esac
 }
