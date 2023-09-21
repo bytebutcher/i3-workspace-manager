@@ -39,7 +39,7 @@ function get_windows() {
         program=$(ps -p "$pid" -o comm=)
         ids[$index]=$(echo "$window" | awk '{print $1}' | xargs printf "%d")
         titles[$index]="$program: $(echo "$window" | awk '{for (i=5; i<=NF; i++) print $i}')"
-        index+=1
+        ((index++))
     done <<< "$(wmctrl -l -p)"
 }
 
