@@ -8,7 +8,7 @@
 #   bytebutcher
 # ##################################################
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 function error_msg() {
     echo -e "Error: $1" >&2;
@@ -27,6 +27,19 @@ function print_array() {
     for i in $(seq 0 $(( ${#array[@]} -1 ))); do
         echo ${array[i]}
     done
+}
+
+function show_prompt() {
+    local prompt="$1"
+    shift
+    rofi -dmenu -p "${prompt}" $@
+}
+
+function show_selection_prompt() {
+    # Shows a selection prompt with case insensitive fuzzy search
+    local prompt="$1"
+    shift
+    rofi -dmenu -p "${prompt}" -i -matching fuzzy -sort -sorting-method fzf $@
 }
 
 function get_windows() {
@@ -52,7 +65,7 @@ function get_current_window() {
 
 function create_workspace() {
     local workspace_name;
-    workspace_name=$(rofi -dmenu -p "Enter workspace name")
+    workspace_name=$(show_prompt "Enter workspace name")
     if [ -z "$workspace_name" ]; then
       error_msg "Workspace name cannot be empty."
       exit 1
@@ -64,7 +77,7 @@ function move_window() {
     local current_window current_window_id window_to_move window_ids window_titles 
     get_windows window_ids window_titles
     get_current_window current_window_id current_window
-    window_to_move=$(echo -e "Move selected window ($current_window)\n$(print_array "${window_titles[@]}")" | rofi -dmenu -p "Select a window to move" -format i)
+    window_to_move=$(echo -e "Move selected window ($current_window)\n$(print_array "${window_titles[@]}")" | show_selection_prompt "Select a window to move" -format i)
     if [ -z "$window_to_move" ]; then
         error_msg "No window selected."
         exit 1
@@ -81,7 +94,7 @@ function move_window() {
 
     current_workspace=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
     workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
-    workspace_to_move=$(echo -e "Move to current workspace ($current_workspace)\n$workspaces" | rofi -dmenu -p "Select a workspace to move the window to")
+    workspace_to_move=$(echo -e "Move to current workspace ($current_workspace)\n$workspaces" | show_selection_prompt "Select a workspace to move the window to")
     if [ -z "$workspace_to_move" ]; then
         error_msg "No workspace selected."
         exit 1
@@ -100,7 +113,7 @@ function move_window() {
 function switch_workspace() {
     local current_workspace workspace_name
     current_workspace=$(i3-msg -t get_workspaces | jq -r '.[] | select(.focused==true).name')
-    workspace_name=$(i3-msg -t get_workspaces | jq -r '.[] | select(.name != "'"$current_workspace"'").name' | rofi -dmenu -p "Select a workspace to switch to")
+    workspace_name=$(i3-msg -t get_workspaces | jq -r '.[] | select(.name != "'"$current_workspace"'").name' | show_selection_prompt "Select a workspace to switch to")
     if [ -z "$workspace_name" ]; then
         error_msg "No workspace selected."
         exit 1
@@ -111,7 +124,7 @@ function switch_workspace() {
 function rename_workspace() {
     current_ws=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
     workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
-    workspace_to_rename=$(echo -e "Rename current workspace ($current_ws)\n$workspaces" | rofi -dmenu -p "Select a workspace to rename")
+    workspace_to_rename=$(echo -e "Rename current workspace ($current_ws)\n$workspaces" | show_selection_prompt "Select a workspace to rename")
     if [ -z "$workspace_to_rename" ]; then
         error_msg "No workspace selected."
         exit 1
@@ -124,7 +137,7 @@ function rename_workspace() {
             old_name=$workspace_to_rename
             ;;
     esac
-    new_name=$(rofi -dmenu -p "Enter new name for $old_name")
+    new_name=$(show_prompt "Enter new name for $old_name")
     if [ -z "$new_name" ]; then
         error_msg "New name is empty."
         exit 1
@@ -135,7 +148,7 @@ function rename_workspace() {
 function delete_workspace() {
     local workspace_index current_workspace
     current_workspace=$(i3-msg -t get_workspaces | jq -r '.[] | select(.focused==true).name')
-    workspace_index=$(i3-msg -t get_workspaces | jq -r '.[].name' | rofi -dmenu -format i -p "Select a workspace to delete")
+    workspace_index=$(i3-msg -t get_workspaces | jq -r '.[].name' | show_selection_prompt "Select a workspace to delete" -format i)
     if [ -z "$workspace_index" ]; then
         error_msg "No workspace selected."
         exit 1
@@ -144,6 +157,10 @@ function delete_workspace() {
     i3-msg "workspace $workspace_name  [workspace=$workspace_name] move to workspace $current_workspace" 1> /dev/null
     i3-msg "workspace $workspace_name; kill" 1> /dev/null
     i3-msg "workspace $current_workspace" 1> /dev/null
+}
+
+function show_version() {
+    echo "i3-workspace-manager $VERSION"
 }
 
 function display_help() {
@@ -156,6 +173,7 @@ function display_help() {
     echo "  delete    Delete an existing workspace"                    >&2
     echo "  move      Move a selected window to a selected workspace"  >&2
     echo "  switch    Switch to a selected workspace"                  >&2
+    echo "  version   Show version number and quit"                    >&2
     echo "  help      Display this help message"                       >&2
 }
 
@@ -166,6 +184,7 @@ function main() {
         delete) delete_workspace ;;
         move) move_window ;;
         switch) switch_workspace ;;
+        version) show_version ;;
         -?|-h|--help|help) display_help ;;
         *) display_help; exit 1 ;;
     esac
