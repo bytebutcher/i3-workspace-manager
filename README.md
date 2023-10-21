@@ -7,14 +7,14 @@ i3-workspace-manager is an interactive command line tool for managing i3 workspa
 ```
 i3-workspace-manager [OPTION]
 
-Options
-
-create    Create a new workspace
-rename    Rename an existing workspace
-delete    Delete an existing workspace
-move      Move a selected window to a selected workspace
-switch    Switch to a selected workspace
-help      Display this help message
+Options:
+  create    Create a new workspace
+  rename    Rename an existing workspace
+  delete    Delete an existing workspace
+  move      Move a selected window to a selected workspace
+  switch    Switch to a selected workspace
+  version   Show version number and quit
+  help      Display this help message
 ```
 
 ## Installation
