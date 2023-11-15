@@ -30,7 +30,9 @@ function do_require_command() {
 
 function print_array() {
     local array=("$@")
-    printf '%s\n' "${array[@]}"
+    for i in $(seq 0 $(( ${#array[@]} -1 ))); do
+        echo ${array[i]}
+    done
 }
 
 function show_prompt() {
@@ -112,7 +114,7 @@ function move_window() {
 
     local predefined_workspaces="$(get_predefined_workspaces)"
     local current_workspace="$(get_current_workspace)"
-    local workspaces="$(echo -e "$(get_active_workspaces)\n${predefined_workspaces}" | grep -vFx "${current_workspace}" | grep -v '^[[:space:]]*$' | sort -nu)"
+    local workspaces="$(echo -e "$(get_active_workspaces)\n${predefined_workspaces}" | grep -vFx "${current_workspace}" | grep -v '^[[:space:]]*$' | sort -u)"
     local workspace_to_move="$(echo -e "Move to current workspace (${current_workspace})\n${workspaces}" | show_selection_prompt "Select a workspace to move the window to")"
     if [[ -z "${workspace_to_move}" ]] ; then
         error_msg "No workspace selected."
@@ -132,7 +134,7 @@ function move_window() {
 function switch_workspace() {
     local predefined_workspaces="$(get_predefined_workspaces)"
     local current_workspace="$(get_current_workspace)"
-    local combined_workspaces="$(echo -e "$(get_active_workspaces)\n${predefined_workspaces}" | grep -vFx "${current_workspace}" | grep -v '^[[:space:]]*$' | g -nu)"
+    local combined_workspaces="$(echo -e "$(get_active_workspaces)\n${predefined_workspaces}" | grep -vFx "${current_workspace}" | grep -v '^[[:space:]]*$' | sort -u)"
     local workspace_name="$(echo -e "${combined_workspaces}" | show_selection_prompt "Select a workspace to switch to")"
     if [[ -z "${workspace_name}" ]] ; then
         error_msg "No workspace selected."
@@ -172,7 +174,7 @@ function delete_workspace() {
         exit 1
     fi
     local workspace_name="$(i3-msg -t get_workspaces | jq -r ".[${workspace_index}].name")"
-    i3-msg "workspace ${workspace_name}  [workspace=${{workspace_name}}] move to workspace ${current_workspace}" 1> /dev/null
+    i3-msg "workspace ${workspace_name}  [workspace=${workspace_name}] move to workspace ${current_workspace}" 1> /dev/null
     i3-msg "workspace ${workspace_name}; kill" 1> /dev/null
     i3-msg "workspace ${current_workspace}" 1> /dev/null
 }
