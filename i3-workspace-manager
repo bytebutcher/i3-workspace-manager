@@ -8,7 +8,13 @@
 #   bytebutcher
 # ##################################################
 
-VERSION="1.1.0"
+APP_NAME="$(basename "${BASH_SOURCE[0]}" ".sh")"
+APP_PATH="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+APP_VERSION="1.2.0"
+
+# Path to the file containing the list of predefined workspaces. 
+# This list enhances the create, move, and switch workspace functionality.
+WORKSPACES_FILE="${APP_PATH}/workspaces.lst"
 
 function error_msg() {
     echo -e "Error: $1" >&2;
@@ -16,17 +22,15 @@ function error_msg() {
 
 function do_require_command() {
     local required_command="$1"
-    command -v "$required_command" >/dev/null 2>&1 || {
-        error_msg "Require $required_command but it's not installed. Aborting."
+    command -v "${required_command}" >/dev/null 2>&1 || {
+        error_msg "Require ${required_command} but it's not installed. Aborting."
         exit 1;
     }
 }
 
 function print_array() {
     local array=("$@")
-    for i in $(seq 0 $(( ${#array[@]} -1 ))); do
-        echo ${array[i]}
-    done
+    printf '%s\n' "${array[@]}"
 }
 
 function show_prompt() {
@@ -43,124 +47,147 @@ function show_selection_prompt() {
 }
 
 function get_windows() {
-    local -n ids=$1
-    local -n titles=$2
+    local -n ids="$1"
+    local -n titles="$2"
     local index pid program
     index=0
     while read -r window; do
-        pid=$(echo "$window" | awk '{print $3}')
-        program=$(ps -p "$pid" -o comm=)
-        ids[$index]=$(echo "$window" | awk '{print $1}' | xargs printf "%d")
-        titles[$index]="$program: $(echo "$window" | awk '{for (i=5; i<=NF; i++) print $i}')"
+        pid="$(echo "${window}" | awk '{print $3}')"
+        program="$(ps -p "${pid}" -o comm=)"
+        ids[$index]="$(echo "${window}" | awk '{print $1}' | xargs printf "%d")"
+        titles[$index]="${program}: $(echo "${window}" | awk '{for (i=5; i<=NF; i++) print $i}')"
         ((index++))
     done <<< "$(wmctrl -l -p)"
 }
 
 function get_current_window() {
-    local -n id=$1
-    local -n title=$2
-    id=$(xprop -root | awk '/_NET_ACTIVE_WINDOW\(WINDOW\)/{print $NF}' | xargs printf "%d");
-    title=$(xprop -id $id | awk '/_NET_WM_NAME/{$1=$2="";print}' | cut -d'"' -f2);
+    local -n id="$1"
+    local -n title="$2"
+    id="$(xprop -root | awk '/_NET_ACTIVE_WINDOW\(WINDOW\)/{print $NF}' | xargs printf "%d")"
+    title="$(xprop -id "${id}" | awk '/_NET_WM_NAME/{$1=$2="";print}' | cut -d'"' -f2)"
+}
+
+function get_active_workspaces() {
+    i3-msg -t get_workspaces | jq -r '.[].name'
+}
+
+function get_current_workspace() {
+    i3-msg -t get_workspaces | jq -r '.[] | select(.focused==true).name'
+}
+
+function get_predefined_workspaces() {
+    if [[ -s "${WORKSPACES_FILE}" ]] ; then
+        grep -v '^[[:space:]]*$' "${WORKSPACES_FILE}"
+    fi
 }
 
 function create_workspace() {
-    local workspace_name;
-    workspace_name=$(show_prompt "Enter workspace name")
-    if [ -z "$workspace_name" ]; then
-      error_msg "Workspace name cannot be empty."
-      exit 1
+    local active_workspaces="$(get_active_workspaces)"
+    local predefined_workspaces="$(get_predefined_workspaces)"
+    local filtered_workspaces="$(echo "${predefined_workspaces}" | grep -vFx -f <(echo "${active_workspaces}") | grep -v '^[[:space:]]*$' | sort -nu)"
+
+    # Use rofi to display the filtered list or allow entering a custom name
+    local workspace_name="$(echo -e "${filtered_workspaces}" | show_prompt "Enter workspace name")"
+
+    # Check if the user made a selection or entered a custom name
+    if [[ -z "${workspace_name}" ]] ; then
+        error_msg "Workspace name cannot be empty."
+        exit 1
     fi
-    i3-msg "workspace $workspace_name" 1> /dev/null
+
+    # Change to the selected or entered workspace
+    i3-msg "workspace ${workspace_name}" 1> /dev/null
 }
 
 function move_window() {
-    local current_window current_window_id window_to_move window_ids window_titles 
+    local window_ids window_titles 
     get_windows window_ids window_titles
+    local current_window_id current_window 
     get_current_window current_window_id current_window
-    window_to_move=$(echo -e "Move selected window ($current_window)\n$(print_array "${window_titles[@]}")" | show_selection_prompt "Select a window to move" -format i)
-    if [ -z "$window_to_move" ]; then
+    local window_to_move="$(echo -e "Move selected window (${current_window})\n$(print_array "${window_titles[@]}")" | show_selection_prompt "Select a window to move" -format i)"
+    if [[ -z "${window_to_move}" ]] ; then
         error_msg "No window selected."
         exit 1
     fi
-    case $window_to_move in
+    case "${window_to_move}" in
         0)
-            selected_window=$current_window_id
+            selected_window="${current_window_id}"
             ;;
         *)
             let "window_to_move -= 1"
-            selected_window=${window_ids[$window_to_move]}
+            selected_window="${window_ids[$window_to_move]}"
             ;;
     esac
 
-    current_workspace=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
-    workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
-    workspace_to_move=$(echo -e "Move to current workspace ($current_workspace)\n$workspaces" | show_selection_prompt "Select a workspace to move the window to")
-    if [ -z "$workspace_to_move" ]; then
+    local predefined_workspaces="$(get_predefined_workspaces)"
+    local current_workspace="$(get_current_workspace)"
+    local workspaces="$(echo -e "$(get_active_workspaces)\n${predefined_workspaces}" | grep -vFx "${current_workspace}" | grep -v '^[[:space:]]*$' | sort -nu)"
+    local workspace_to_move="$(echo -e "Move to current workspace (${current_workspace})\n${workspaces}" | show_selection_prompt "Select a workspace to move the window to")"
+    if [[ -z "${workspace_to_move}" ]] ; then
         error_msg "No workspace selected."
         exit 1
     fi
-    case $workspace_to_move in
-        "Move to current workspace ($current_workspace)")
-            selected_workspace=$current_workspace
+    case "${workspace_to_move}" in
+        "Move to current workspace (${current_workspace})")
+            selected_workspace="${current_workspace}"
             ;;
         *)
-            selected_workspace=$workspace_to_move
+            selected_workspace="${workspace_to_move}"
             ;;
     esac
-    i3-msg "[id=$selected_window] move to workspace $selected_workspace" 1> /dev/null
+    i3-msg "[id=${selected_window}] move to workspace ${selected_workspace}" 1> /dev/null
 }
 
 function switch_workspace() {
-    local current_workspace workspace_name
-    current_workspace=$(i3-msg -t get_workspaces | jq -r '.[] | select(.focused==true).name')
-    workspace_name=$(i3-msg -t get_workspaces | jq -r '.[] | select(.name != "'"$current_workspace"'").name' | show_selection_prompt "Select a workspace to switch to")
-    if [ -z "$workspace_name" ]; then
+    local predefined_workspaces="$(get_predefined_workspaces)"
+    local current_workspace="$(get_current_workspace)"
+    local combined_workspaces="$(echo -e "$(get_active_workspaces)\n${predefined_workspaces}" | grep -vFx "${current_workspace}" | grep -v '^[[:space:]]*$' | g -nu)"
+    local workspace_name="$(echo -e "${combined_workspaces}" | show_selection_prompt "Select a workspace to switch to")"
+    if [[ -z "${workspace_name}" ]] ; then
         error_msg "No workspace selected."
         exit 1
     fi
-    i3-msg "workspace $workspace_name" 1> /dev/null
+    i3-msg "workspace ${workspace_name}" 1> /dev/null
 }
 
 function rename_workspace() {
-    current_ws=$(i3-msg -t get_workspaces | jq '.[] | select(.focused==true).name' | tr -d '"')
-    workspaces=$(i3-msg -t get_workspaces | jq '.[].name' | tr -d '"')
-    workspace_to_rename=$(echo -e "Rename current workspace ($current_ws)\n$workspaces" | show_selection_prompt "Select a workspace to rename")
-    if [ -z "$workspace_to_rename" ]; then
+    local current_workspace="$(get_current_workspace)"
+    local workspace_to_rename="$(echo -e "Rename current workspace (${current_workspace})\n$(get_active_workspaces)" | show_selection_prompt "Select a workspace to rename")"
+    if [[ -z "${workspace_to_rename}" ]] ; then
         error_msg "No workspace selected."
         exit 1
     fi
-    case $workspace_to_rename in
-        "Rename current workspace ($current_ws)")
-            old_name=$current_ws
+    case "${workspace_to_rename}" in
+        "Rename current workspace (${current_workspace})")
+            local old_name="${current_workspace}"
             ;;
         *)
-            old_name=$workspace_to_rename
+            local old_name="${workspace_to_rename}"
             ;;
     esac
-    new_name=$(show_prompt "Enter new name for $old_name")
-    if [ -z "$new_name" ]; then
+    local new_name="$(show_prompt "Enter new name for ${old_name}")"
+    if [[ -z "${new_name}" ]] ; then
         error_msg "New name is empty."
         exit 1
     fi
-    i3-msg "rename workspace \"$old_name\" to \"$new_name\"" &> /dev/null
+    i3-msg "rename workspace \"${old_name}\" to \"${new_name}\"" &> /dev/null
 }
 
 function delete_workspace() {
-    local workspace_index current_workspace
-    current_workspace=$(i3-msg -t get_workspaces | jq -r '.[] | select(.focused==true).name')
-    workspace_index=$(i3-msg -t get_workspaces | jq -r '.[].name' | show_selection_prompt "Select a workspace to delete" -format i)
-    if [ -z "$workspace_index" ]; then
+    local current_workspace="$(get_current_workspace)"
+    local workspace_index="$(get_active_workspaces | show_selection_prompt "Select a workspace to delete" -format i)"
+    if [[ -z "${workspace_index}" ]] ; then
         error_msg "No workspace selected."
         exit 1
     fi
-    workspace_name=$(i3-msg -t get_workspaces | jq -r ".[$workspace_index].name")
-    i3-msg "workspace $workspace_name  [workspace=$workspace_name] move to workspace $current_workspace" 1> /dev/null
-    i3-msg "workspace $workspace_name; kill" 1> /dev/null
-    i3-msg "workspace $current_workspace" 1> /dev/null
+    local workspace_name="$(i3-msg -t get_workspaces | jq -r ".[${workspace_index}].name")"
+    i3-msg "workspace ${workspace_name}  [workspace=${{workspace_name}}] move to workspace ${current_workspace}" 1> /dev/null
+    i3-msg "workspace ${workspace_name}; kill" 1> /dev/null
+    i3-msg "workspace ${current_workspace}" 1> /dev/null
 }
 
 function show_version() {
-    echo "i3-workspace-manager $VERSION"
+    echo "i3-workspace-manager ${APP_VERSION}"
 }
 
 function display_help() {

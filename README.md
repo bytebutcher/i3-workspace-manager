@@ -57,6 +57,18 @@ bindsym $mod+F1 mode "$mode_workspace"
 bindsym $mod+Tab exec "i3-workspace-manager switch"
 bindsym $mod+m exec "i3-workspace-manager move"
 ```
+## Predefined Workspaces
+
+i3-workspace-manager supports the use of predefined workspaces. 
+This feature offers these predefined workspaces as options when creating, 
+moving, or switching workspaces, in addition to allowing the entry of 
+custom workspace names.
+
+To use predefined workspaces, simply add your workspace names to a file named 
+`workspaces.lst`. 
+This file should be located in the i3-workspace-manager directory. 
+The tool will automatically read this file and incorporate these workspaces 
+into its functionality.
 
 ## Contributions
 
