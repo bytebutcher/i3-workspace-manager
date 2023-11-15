@@ -82,20 +82,11 @@ function get_predefined_workspaces() {
 }
 
 function create_workspace() {
-    local active_workspaces="$(get_active_workspaces)"
-    local predefined_workspaces="$(get_predefined_workspaces)"
-    local filtered_workspaces="$(echo "${predefined_workspaces}" | grep -vFx -f <(echo "${active_workspaces}") | grep -v '^[[:space:]]*$' | sort -nu)"
-
-    # Use rofi to display the filtered list or allow entering a custom name
-    local workspace_name="$(echo -e "${filtered_workspaces}" | show_prompt "Enter workspace name")"
-
-    # Check if the user made a selection or entered a custom name
+    local workspace_name="$(show_prompt "Enter workspace name")"
     if [[ -z "${workspace_name}" ]] ; then
         error_msg "Workspace name cannot be empty."
         exit 1
     fi
-
-    # Change to the selected or entered workspace
     i3-msg "workspace ${workspace_name}" 1> /dev/null
 }
 
